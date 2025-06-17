@@ -1,178 +1,130 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.cluster import KMeans
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Prediksi Stres Mahasiswa", layout="centered")
 
-st.title("Aplikasi Prediksi Stres Mahasiswa")
+st.title("📈 Prediksi Tingkat Stres Mahasiswa")
 
-menu = st.sidebar.selectbox("Navigasi", [
-    "Upload & Data Awal",
-    "Evaluasi Model",
-    "Visualisasi Prediksi",
-    "Analisis Fitur",
-    "Simulasi What-If",
-    "Segmentasi Mahasiswa",
-    "Download Hasil"
-])
+try:
+    df = pd.read_csv("StressLevelDataset.csv")  # pastikan file ini ada di folder yang sama
+except FileNotFoundError:
+    st.error("Oh no! tidak ada dataset untuk dilatih. Hubungi administrator")
+    st.stop()
 
-uploaded_file = st.file_uploader("Upload Dataset (.csv)", type=["csv"])
+if "stress_level" not in df.columns:
+    st.error("Dataset tidak memiliki kolom 'stress_level'.")
+else:
+    # Pisahkan fitur dan target
+    X = df.drop(columns=["stress_level"])
+    y = df["stress_level"]
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+    # Hanya gunakan fitur numerik
+    X = X.select_dtypes(include="number")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    if "stress_level" not in df.columns:
-        st.error("Kolom 'stress_level' tidak ditemukan di dataset. Pastikan dataset memiliki kolom target tersebut.")
-    else:
-        # Preprocessing
-        X = df.drop(columns=["stress_level"])
-        y = df["stress_level"]
-        X = X.select_dtypes(include='number')
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Melatih model regresi
+    model = LinearRegression()
+    model.fit(X_train, y_train)
 
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+    # Mapping nama kolom ke label bahasa Indonesia
+    label_mapping = {
+        "anxiety_level": "Tingkat Kecemasan",
+        "self_esteem": "Percaya Diri",
+        "mental_health_history": "Riwayat Kesehatan Mental",
+        "depression": "Depresi",
+        "headache": "Sakit Kepala",
+        "blood_pressure": "Tekanan Darah",            
+        "sleep_quality": "Kualitas Tidur",
+        "breathing_problem": "Permasalahan Pernafasan",
+        "noise_level": "Tingkat Kebisingan",
+        "living_conditions": "Kondisi kehidupan",
+        "safety": "Rasa Aman",
+        "basic_needs": "Kebutuhan Dasar Terpenuhi",
+        "study_load": "Beban Studi",
+        "teacher_student_relationship": "Hubungan dengan Dosen",
+        "future_career_concerns": "Kecemasan Karir",
+        "social_support": "Dukungan Lingkungan",
+        "peer_pressure": "Tekanan Teman Sebaya",
+        "extracurricular_activities": "Aktivitas Ekstrakulikuler",
+        "bullying": "Penindasan",
+        "family_support": "Dukungan Keluarga",
+        "academic_performance": "Performa Akademik",
+        "social_interaction": "Interaksi Sosial"
+    }        
 
-        if menu == "Upload & Data Awal":
-            st.subheader("Data Awal")
-            st.write(df.head())
+    # Koefisien dari model linear
+    coefficients = model.coef_
+    feature_names = X.columns
+    means = X.mean()
 
-        elif menu == "Evaluasi Model":
-            st.subheader("Hasil Evaluasi Model")
-            mse_val = mean_squared_error(y_test, y_pred)
-            r2_val = r2_score(y_test, y_pred)
-            st.write("Mean Squared Error (MSE):", mse_val)
-            st.write("R-squared (R²):", r2_val)
+    kontribusi_rata2 = {
+        label_mapping.get(f, f.replace("_", " ").capitalize()): means[f] * coef
+        for f, coef in zip(feature_names, coefficients)
+    }
 
-            st.markdown("**Interpretasi:**")
-            st.markdown(f"- MSE lebih rendah = error prediksi kecil. Nilai saat ini: `{mse_val:.2f}`.")
-            st.markdown(f"- R² = `{r2_val:.2f}` berarti sekitar `{r2_val*100:.1f}%` variasi tingkat stres dapat dijelaskan oleh fitur-fitur input.")
+    # Buat dataframe dan urutkan berdasarkan pengaruh (langsung saat membuat)
+    kontribusi_df = pd.DataFrame(
+        sorted(kontribusi_rata2.items(), key=lambda x: x[1], reverse=True),
+        columns=["Faktor", "Pengaruh"]
+    )
 
-        elif menu == "Visualisasi Prediksi":
-            st.subheader("Visualisasi Prediksi vs Aktual")
-            fig, ax = plt.subplots()
-            ax.scatter(y_test, y_pred, alpha=0.7)
-            ax.plot([y.min(), y.max()], [y.min(), y.max()], 'r--')
-            ax.set_xlabel("Nilai Aktual")
-            ax.set_ylabel("Nilai Prediksi")
-            ax.set_title("Prediksi vs Aktual")
-            st.pyplot(fig)
+    st.markdown("""
+    ### 🧠 Tentang Model Prediksi
 
-        elif menu == "Analisis Fitur":
-            st.subheader("Koefisien Regresi & Korelasi")
-            coef_df = pd.DataFrame(model.coef_, index=X.columns, columns=["Koefisien"])
-            st.write("Intercept:", model.intercept_)
-            st.write(coef_df)
+    Model yang digunakan untuk memprediksi tingkat stres pada mahasiswa adalah **Regresi Linear (Linear Regression)**.  
+    Model ini bekerja dengan mengukur seberapa besar pengaruh masing-masing faktor (seperti kecemasan, tekanan teman sebaya, kualitas tidur, dan lainnya) terhadap tingkat stres berdasarkan data yang diberikan.
 
-            fig, ax = plt.subplots(figsize=(8, 6))
-            sns.heatmap(df.select_dtypes(include='number').corr(), annot=True, cmap='coolwarm', ax=ax)
-            st.pyplot(fig)
+    Semakin besar nilai koefisien dari suatu faktor, maka faktor tersebut cenderung memiliki pengaruh lebih besar terhadap stres mahasiswa.  
+    Tabel di bawah ini menampilkan faktor-faktor tersebut diurutkan berdasarkan kontribusinya terhadap hasil prediksi stres, dihitung dari nilai rata-rata dataset dan bobot model.
+    """)
 
-            fig2, ax2 = plt.subplots()
-            coef_df.sort_values(by="Koefisien", ascending=True).plot(kind='barh', ax=ax2)
-            ax2.set_title("Pengaruh Fitur terhadap Tingkat Stres")
-            st.pyplot(fig2)
+    st.subheader("📌 Faktor yang Paling Mempengaruhi Stres (berdasarkan data rata-rata)")
+    st.markdown("Berikut ini adalah estimasi seberapa besar pengaruh rata-rata masing-masing faktor terhadap tingkat stres, berdasarkan model:")
+    st.dataframe(kontribusi_df, use_container_width=True)
 
-            most_impact = coef_df['Koefisien'].abs().idxmax()
-            impact_value = coef_df.loc[most_impact, 'Koefisien']
-            direction = "meningkatkan" if impact_value > 0 else "menurunkan"
-            st.markdown(f"📌 Fitur `{most_impact}` memiliki pengaruh paling besar, dan dapat {direction} tingkat stres sebesar `{abs(impact_value):.2f}`.")
+    st.subheader("🧾 Input Data Mahasiswa")
+    user_data = {}
+    
+    for col in X.columns:
+        label = label_mapping.get(col, col.replace("_", " ").capitalize())
+        col_min = float(df[col].min())
+        col_max = float(df[col].max())
+        col_median = float(df[col].median())
+        user_data[col] = st.slider(
+            label,
+            min_value=col_min,
+            max_value=col_max,
+            value=col_median,
+            step=0.1
+        )
 
-        elif menu == "Simulasi What-If":
-            st.subheader("Simulasi What-If")
-            selected_feature = st.selectbox("Pilih fitur:", X.columns)
-            delta = st.slider("Perubahan nilai fitur (delta):", -10.0, 10.0, 1.0, step=0.5)
-            X_sim = X_test.copy()
-            X_sim[selected_feature] += delta
-            y_sim = model.predict(X_sim)
+    if st.button("🔮 Prediksi Tingkat Stres"):
+        input_df = pd.DataFrame([user_data])
+        pred = model.predict(input_df)[0]
 
-            st.write(f"Rata-rata prediksi awal: {np.mean(y_pred):.2f}")
-            st.write(f"Setelah perubahan: {np.mean(y_sim):.2f}")
+        # Interpretasi narasi yang lebih bermakna
+        st.subheader("📊 Hasil Prediksi")
 
-            delta_effect = np.mean(y_sim) - np.mean(y_pred)
-            if delta_effect > 0:
-                st.markdown(f"📌 Perubahan meningkatkan rata-rata stres sebesar `{delta_effect:.2f}`")
-            else:
-                st.markdown(f"📌 Perubahan menurunkan rata-rata stres sebesar `{abs(delta_effect):.2f}`")
-        
-        elif menu == "Segmentasi Mahasiswa":
-            st.subheader("Segmentasi Mahasiswa berdasarkan Pola Fitur")
+        st.metric("Prediksi Nilai Stres", f"{pred:.2f}")
 
-            num_clusters = st.slider("Jumlah cluster:", 2, 6, 3)
-            kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-            X_cluster = X.copy()
-            X_cluster["Cluster"] = kmeans.fit_predict(X)
+        if pred <= 0.5:
+            kategori = "Sangat Rendah"
+            narasi = "Mahasiswa hampir tidak mengalami stres. Kondisi mental dan lingkungan belajar terjaga sangat baik."
+        elif pred <= 1.0:
+            kategori = "Rendah"
+            narasi = "Mahasiswa menunjukkan tingkat stres yang tergolong rendah. Tetap pertahankan manajemen waktu dan keseimbangan hidup."
+        elif pred <= 1.5:
+            kategori = "Sedang"
+            narasi = "Tingkat stres mahasiswa tergolong sedang. Perlu mulai memperhatikan kebiasaan harian dan mencari dukungan sosial atau keluarga."
+        elif pred <= 2.0:
+            kategori = "Tinggi"
+            narasi = "Mahasiswa mengalami stres yang cukup tinggi. Disarankan untuk berbicara dengan konselor atau mengambil waktu untuk istirahat mental."
+        else:
+            kategori = "Sangat Tinggi"
+            narasi = "Tingkat stres mahasiswa sangat tinggi. Sangat disarankan segera berkonsultasi dengan profesional untuk penanganan lebih lanjut."
 
-            st.write("Rata-rata fitur tiap cluster:")
-            st.write(X_cluster.groupby("Cluster").mean())
+        st.success(f"Tingkat Stres: {kategori}")            
+        st.markdown(f"🧠 {narasi}")
 
-            color_map = plt.cm.get_cmap('Set2', num_clusters)
-
-            if X.shape[1] >= 2:
-                fig, ax = plt.subplots()
-                scatter = ax.scatter(
-                    X.iloc[:, 0],
-                    X.iloc[:, 1],
-                    c=X_cluster["Cluster"],
-                    cmap=color_map
-                )
-                ax.set_xlabel(X.columns[0])
-                ax.set_ylabel(X.columns[1])
-                ax.set_title("Visualisasi Cluster Mahasiswa")
-
-                # Buat legend berdasarkan cluster
-                handles = []
-                for i in range(num_clusters):
-                    handles.append(
-                        plt.Line2D(
-                            [0], [0],
-                            marker='o',
-                            color='w',
-                            label=f"Cluster {i}",
-                            markerfacecolor=color_map(i),
-                            markersize=10
-                        )
-                    )
-                ax.legend(handles=handles, title="Cluster")
-                st.pyplot(fig)
-
-            # Narasi interpretatif berdasarkan cluster
-            st.markdown("### Narasi Interpretatif:")
-            cluster_summary = X_cluster.groupby("Cluster").mean()
-
-            for i in range(num_clusters):
-                st.markdown(f"**🟢 Cluster {i}:**")
-                dominant_feature = cluster_summary.iloc[i].sort_values(ascending=False).index[0]
-                st.markdown(f"- Mahasiswa dalam kelompok ini cenderung menonjol pada fitur `{dominant_feature}`.")
-                if "stress_level" in df.columns:
-                    avg_stress = df.loc[X_cluster["Cluster"] == i, "stress_level"].mean()
-                    st.markdown(f"- Rata-rata tingkat stres: `{avg_stress:.2f}`.")
-                    if avg_stress >= 70:
-                        st.markdown("- ⚠️ Indikasi kelompok dengan risiko stres tinggi. Perlu perhatian khusus.")
-                    elif avg_stress <= 40:
-                        st.markdown("- ✅ Kelompok ini menunjukkan kecenderungan stres rendah.")
-                    else:
-                        st.markdown("- ⚖️ Tingkat stres tergolong sedang.")
-                else:
-                    st.markdown("- Data stres tidak tersedia untuk narasi lebih lanjut.")
-
-            st.markdown("### 🧠 Insight & Rekomendasi:")
-            st.markdown("Dengan segmentasi ini, pendekatan individual bisa dikembangkan berdasarkan karakteristik setiap kelompok:")
-            st.markdown("- 💼 Cluster dengan dominasi beban kerja bisa dibimbing manajemen waktu.")
-            st.markdown("- 💤 Cluster dengan waktu istirahat rendah bisa diberi edukasi pentingnya tidur.")
-            st.markdown("- 🙌 Cluster dengan stres rendah bisa dijadikan panutan/mentor dalam kegiatan kampus.")
-        
-        elif menu == "Download Hasil":
-            st.subheader("Unduh Hasil Prediksi")
-            result_df = X_test.copy()
-            result_df["Actual_Stress"] = y_test.values
-            result_df["Predicted_Stress"] = y_pred
-            csv = result_df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download sebagai CSV", data=csv, file_name="hasil_prediksi.csv", mime="text/csv")
